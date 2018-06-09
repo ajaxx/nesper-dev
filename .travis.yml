@@ -5,8 +5,10 @@ dist: trusty
 
 install:
 #	- nuget restore NEsper.sln
-	- dotnet restore NEsper.sln
+#	- dotnet restore NEsper.sln
+	- echo "Install"
 
 script:
 #       - msbuild /t:Rebuild NEsper.sln
-	- dotnet build
+#	- dotnet build
+	- echo "Build"
