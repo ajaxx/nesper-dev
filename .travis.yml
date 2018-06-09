@@ -1,11 +1,12 @@
 language: csharp
 solution: NEsper.sln
+dotnet: 2.0.0
 dist: trusty
 
 install:
-	- nuget restore NEsper.sln
+#	- nuget restore NEsper.sln
 	- dotnet restore NEsper.sln
 
 script:
-	# - msbuild /t:Rebuild NEsper.sln
+#       - msbuild /t:Rebuild NEsper.sln
 	- dotnet build
