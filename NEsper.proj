@@ -22,10 +22,12 @@
   </PropertyGroup>
 
   <Target Name="ApplyLabel">
+  <!--
     <FileUpdate
        Files="$(MSBuildProjectDirectory)\NEsper.Documentation\NEsper.Documentation.shfbproj"
        Regex="build\\NEsper-[0-9\.]+\\"
        ReplacementText="build\NEsper-$(Version)" />
+  -->
   </Target>
 
   <Target Name="Rebuild">
