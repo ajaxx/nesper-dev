@@ -71,8 +71,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NEsper.Data.SQLite", "NEspe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NEsper.Log.NLog", "NEsper\NEsper.Log.NLog\NEsper.Log.NLog.csproj", "{C4476B1F-1EF4-4B1C-96F1-20FC0E5AEC13}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NEsper.Codegen.Roslyn", "NEsper\NEsper.Codegen.Roslyn\NEsper.Codegen.Roslyn.csproj", "{6243AC20-136E-4BA2-B96A-232352D4B3AE}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
