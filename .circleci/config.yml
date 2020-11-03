@@ -9,5 +9,5 @@
     
      steps:
        - checkout
-       - run: dotnet build
+       - run: dotnet build NEsper.sln
 
