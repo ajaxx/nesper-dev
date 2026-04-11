@@ -19,7 +19,7 @@
     Show configuration summary without running tests
 .EXAMPLE
     .\run-test-batches.ps1
-    Runs all enabled batches
+    Runs all enabled batches; TRX results saved under TestResults\<timestamp>\
 .EXAMPLE
     .\run-test-batches.ps1 -BatchName "EPL-Database"
     Runs only the EPL-Database batch
@@ -121,6 +121,10 @@ $results = @{
 }
 
 $startTime = Get-Date
+$runTimestamp = $startTime.ToString("yyyy-MM-dd_HH-mm-ss")
+$testResultsDir = Join-Path $PSScriptRoot "TestResults\$runTimestamp"
+New-Item -ItemType Directory -Path $testResultsDir -Force | Out-Null
+Write-Info "Test results directory: $testResultsDir"
 
 # Run isolated tests if requested
 if ($IsolatedOnly) {
@@ -138,12 +142,14 @@ if ($IsolatedOnly) {
         $timeout = $test.timeout
         $filter = $test.filter
 
+        $trxFile = Join-Path $testResultsDir "$($test.name).trx"
         $testArgs = @(
             "test",
             "--filter", $filter,
             "--framework", $targetFramework,
             "--settings", $runSettings,
-            "--logger", "console;verbosity=normal"
+            "--logger", "console;verbosity=normal",
+            "--logger", "trx;LogFileName=$trxFile"
         )
 
         $testResult = & dotnet @testArgs
@@ -164,6 +170,8 @@ if ($IsolatedOnly) {
     Write-Info "Total: $($results.Total)"
     Write-Success "Passed: $($results.Passed)"
     Write-Failure "Failed: $($results.Failed)"
+    Write-Info ""
+    Write-Info "TRX results: $testResultsDir"
 
     exit $(if ($results.Failed -gt 0) { 1 } else { 0 })
 }
@@ -200,17 +208,16 @@ try {
         $batchStartTime = Get-Date
 
         # Build test arguments
+        $consoleVerbosity = if ($Verbose) { "console;verbosity=detailed" } else { "console;verbosity=normal" }
+        $trxFile = Join-Path $testResultsDir "$($batch.name).trx"
         $testArgs = @(
             "test",
             "--filter", $batch.filter,
             "--framework", $targetFramework,
             "--settings", "../../$runSettings",
-            "--logger", "console;verbosity=normal"
+            "--logger", $consoleVerbosity,
+            "--logger", "trx;LogFileName=$trxFile"
         )
-
-        if ($Verbose) {
-            $testArgs[-1] = "console;verbosity=detailed"
-        }
 
         # Run the tests
         Write-Info "Executing: dotnet $($testArgs -join ' ')"
@@ -279,6 +286,25 @@ try {
         Write-Info ""
         Write-Warning "Note: $($config.knownFailures.failures.Count) known failure(s) documented in configuration"
     }
+
+    Write-Info ""
+    Write-Info "TRX results: $testResultsDir"
+
+    # Write summary.txt so the run is reviewable after the terminal closes
+    $summaryLines = @(
+        "NEsper Test Run Summary",
+        "Run:       $runTimestamp",
+        "Framework: $targetFramework",
+        "Duration:  $('{0:N2}' -f $totalDuration)s",
+        "Batches:   $($results.Total) total, $($results.Passed) passed, $($results.Failed) failed",
+        "",
+        "Batch Results:"
+    )
+    foreach ($result in $results.BatchResults) {
+        $status = if ($result.Success) { "PASS" } else { "FAIL" }
+        $summaryLines += "  [$status] $($result.Name) ($('{0:N2}' -f $result.Duration)s)"
+    }
+    $summaryLines | Set-Content (Join-Path $testResultsDir "summary.txt")
 
     # Exit with appropriate code
     exit $(if ($results.Failed -gt 0) { 1 } else { 0 })
