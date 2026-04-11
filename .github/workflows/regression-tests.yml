@@ -1,0 +1,230 @@
+name: Regression Tests
+
+on:
+  push:
+    branches:
+      - master
+      - 'release/**'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: 'Batch name to run (leave blank to run all)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+
+  # ─── Build ────────────────────────────────────────────────────────────────────
+  # Compiles the solution once, then bundles the test binaries, run settings, and
+  # DB init SQL into a single artifact consumed by every parallel test job.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Build (net9.0)
+        run: dotnet build NEsperAll.sln --configuration Release --framework net9.0
+
+      - name: Stage artifact
+        run: |
+          mkdir -p staging/bin
+          cp -r tst/NEsper.Regression.Runner/bin/Release/net9.0/. staging/bin/
+          cp NEsper.runsettings staging/
+          cp tst/etc/regression/create_testdb_pgsql.sql staging/
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-binaries
+          path: staging/
+          retention-days: 1
+
+
+  # ─── Test matrix ──────────────────────────────────────────────────────────────
+  # Each batch runs in its own job against the shared build artifact.
+  # Postgres is always present — conditional service containers aren't supported
+  # by GitHub Actions, and the startup cost is negligible on non-DB batches.
+  test:
+    name: "${{ matrix.batch }}"
+    needs: build
+    runs-on: ubuntu-latest
+
+    # For workflow_dispatch: skip jobs that don't match the requested batch.
+    # Push/PR events always run all batches.
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      inputs.batch == '' ||
+      inputs.batch == matrix.batch
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: esper
+          POSTGRES_USER: esper
+          POSTGRES_PASSWORD: 3sp3rP@ssw0rd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    strategy:
+      fail-fast: false   # don't cancel siblings on first failure
+      matrix:
+        include:
+          - batch: Client
+            filter: TestClient
+            requires_db: false
+            timeout_minutes: 10
+          - batch: Context
+            filter: TestContext
+            requires_db: true
+            timeout_minutes: 20
+          - batch: EPL-Database
+            filter: TestEPLDatabase
+            requires_db: true
+            timeout_minutes: 10
+          - batch: EPL-Dataflow
+            filter: TestEPLDataflow
+            requires_db: false
+            timeout_minutes: 20
+          - batch: EPL-FromClause
+            filter: TestEPLFromClauseMethod
+            requires_db: false
+            timeout_minutes: 10
+          - batch: EPL-Join
+            filter: TestEPLJoin
+            requires_db: false
+            timeout_minutes: 20
+          - batch: EPL-Other
+            filter: TestEPLOther
+            requires_db: false
+            timeout_minutes: 20
+          - batch: EPL-Subselect
+            filter: TestEPLSubselect
+            requires_db: false
+            timeout_minutes: 20
+          - batch: Event
+            filter: TestEvent
+            requires_db: false
+            timeout_minutes: 20
+          - batch: Expression
+            filter: TestExpr
+            requires_db: false
+            timeout_minutes: 20
+          - batch: Infrastructure
+            filter: TestInfra
+            requires_db: false
+            timeout_minutes: 20
+          - batch: Multithread
+            filter: TestMultithreaded
+            requires_db: true
+            timeout_minutes: 10
+          - batch: Pattern
+            filter: TestPattern
+            requires_db: false
+            timeout_minutes: 20
+          - batch: ResultSet
+            filter: TestResultSet
+            requires_db: false
+            timeout_minutes: 20
+          - batch: RowRecognition
+            filter: TestRowRecog
+            requires_db: false
+            timeout_minutes: 20
+          - batch: View
+            filter: TestView
+            requires_db: false
+            timeout_minutes: 20
+
+    steps:
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Download test artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: test-binaries
+          path: artifact
+
+      # psql is pre-installed on ubuntu-latest; this step is a no-op on non-DB batches.
+      - name: Initialize database
+        if: matrix.requires_db
+        env:
+          PGPASSWORD: 3sp3rP@ssw0rd
+        run: psql -h localhost -U esper -d esper -f artifact/create_testdb_pgsql.sql
+
+      - name: Run tests — ${{ matrix.batch }}
+        timeout-minutes: ${{ matrix.timeout_minutes }}
+        run: |
+          dotnet test artifact/bin/NEsper.Regression.Runner.dll \
+            --settings artifact/NEsper.runsettings \
+            --filter "${{ matrix.filter }}" \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=${{ github.workspace }}/TestResults/${{ matrix.batch }}.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.batch }}
+          path: TestResults/${{ matrix.batch }}.trx
+          retention-days: 7
+
+
+  # ─── Report ───────────────────────────────────────────────────────────────────
+  # Collects all TRX files, publishes a rich summary to the PR/commit, and fails
+  # the check if any batch failed. Add this job as the required status check on
+  # master branch protection (Settings → Branches → require "Report" to pass).
+  report:
+    name: Report
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+          path: TestResults
+
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        with:
+          name: Regression Test Results
+          path: 'TestResults/*.trx'
+          reporter: dotnet-trx
+          fail-on-error: true
+
+      - name: Fail if any batch failed
+        if: needs.test.result != 'success'
+        run: |
+          echo "One or more test batches failed. See the test report above for details."
+          exit 1
