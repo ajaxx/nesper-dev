@@ -8,3 +8,7 @@
 **/*.keep
 packages
 tst/db/data
+
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
+BenchmarkResults/
