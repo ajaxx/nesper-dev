@@ -29,7 +29,7 @@ namespace com.espertech.esper.common.client.artifact
         {
             var baseTypeResolver = container.Has<TypeResolver>()
                 ? container.Resolve<TypeResolver>()
-                : TypeResolverDefault.INSTANCE;
+                : new TypeResolverDefault(container.AssemblyLoadContext);
             var assemblyResolver = container.Has<AssemblyResolver>()
                 ? container.Resolve<AssemblyResolver>()
                 : null;

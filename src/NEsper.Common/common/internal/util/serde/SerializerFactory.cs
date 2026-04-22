@@ -27,8 +27,12 @@ namespace com.espertech.esper.common.@internal.util.serde
         /// Returns a barebones serializer factory.
         /// </summary>
         public static SerializerFactory Instance {
-            get { // use the default type resolver; nothing special
-                var typeResolver = TypeResolverDefault.INSTANCE;
+            get {
+                // use the default type resolver; consider the implications of
+                // potentially having the wrong assembly load context
+                var typeResolver = new TypeResolverDefault(
+                    System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ??
+                    System.Runtime.Loader.AssemblyLoadContext.Default);
                 // create an object serializer
                 var serializer = new ObjectSerializer(typeResolver);
                 // create a serializer factory
@@ -46,7 +50,10 @@ namespace com.espertech.esper.common.@internal.util.serde
             } else if (container.Has<TypeResolverProvider>()) {
                 typeResolver = container.Resolve<TypeResolverProvider>().TypeResolver;
             } else {
-                typeResolver = TypeResolverDefault.INSTANCE;
+                typeResolver = new TypeResolverDefault(
+                    container.AssemblyLoadContext ??
+                    System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ??
+                    System.Runtime.Loader.AssemblyLoadContext.Default);
             }
             
             return new ObjectSerializer(typeResolver);

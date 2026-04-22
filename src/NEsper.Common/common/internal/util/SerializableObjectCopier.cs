@@ -69,7 +69,7 @@ namespace com.espertech.esper.common.@internal.util
             } else if (_container.Has<TypeResolverProvider>()) {
                 typeResolver = _container.Resolve<TypeResolverProvider>().TypeResolver;
             } else {
-                typeResolver = TypeResolverDefault.INSTANCE;
+                typeResolver = new TypeResolverDefault(_container.AssemblyLoadContext);
             }
 
             lock (_container) {

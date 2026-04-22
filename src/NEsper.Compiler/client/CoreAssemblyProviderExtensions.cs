@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -11,9 +12,13 @@ namespace com.espertech.esper.compiler.client
         /// <summary>
         /// Provides the assemblies should be provided to the compiler as part of the compilation and linking process.
         /// </summary>
-        public static IEnumerable<Assembly> GetCoreAssemblies()
+        public static IEnumerable<Assembly> GetCoreAssemblies(IContainer container)
         {
 #if NETCOREAPP3_0_OR_GREATER
+            var assemblyLoadContext = container.AssemblyLoadContext;
+            if ((assemblyLoadContext != null) && (assemblyLoadContext != AssemblyLoadContext.Default)) {
+                return Enumerable.Concat(assemblyLoadContext.Assemblies, AssemblyLoadContext.Default.Assemblies);
+            }
             return AssemblyLoadContext.Default.Assemblies;
 #else
             return AppDomain.CurrentDomain.GetAssemblies();
@@ -32,7 +37,7 @@ namespace com.espertech.esper.compiler.client
 
             lock (container) {
                 if (container.DoesNotHave<CoreAssemblyProvider>()) {
-                    return GetCoreAssemblies;
+                    return () => GetCoreAssemblies(container);
                 }
             }
 
